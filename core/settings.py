@@ -131,8 +131,11 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
+# -------------------------
+# DRF (base configuration)
+# -------------------------
 REST_FRAMEWORK = {
-    
+     # Keep default permissions open for now; we will secure endpoints explicitly per view.
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
@@ -141,10 +144,17 @@ REST_FRAMEWORK = {
 
 }
 
+# -------------------------
+# CORS / Cookies
+# -------------------------
+# For local development this is the simplest setup.
+# In production, replace this with CORS_ALLOWED_ORIGINS.
 CORS_ALLOW_ALL_ORIGINS = True
 
+# Allow sending cookies from the frontend (fetch/axios must use credentials/withCredentials)
 CORS_ALLOW_CREDENTIALS = True
 
+# CSRF trusted origins for typical local frontend dev servers (React/Vite)
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -153,11 +163,13 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 
+# Cookie security toggles (prod vs dev)
 IS_PROD = not DEBUG
 
 SESSION_COOKIE_SECURE = IS_PROD
 CSRF_COOKIE_SECURE = IS_PROD
 
-
+# SameSite defaults: Lax is fine for local same-site setups.
+# If your frontend is on a different domain in production, you may need SameSite=None + Secure.
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
