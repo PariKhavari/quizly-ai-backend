@@ -173,3 +173,21 @@ CSRF_COOKIE_SECURE = IS_PROD
 # If your frontend is on a different domain in production, you may need SameSite=None + Secure.
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
+          
+# Cookie names must match the endpoint documentation
+JWT_ACCESS_COOKIE_NAME = "access_token"
+JWT_REFRESH_COOKIE_NAME = "refresh_token"
+
+# Cookie flags (HTTP-only cookies cannot be read by JavaScript)
+JWT_COOKIE_HTTPONLY = True
+
+# For local development set Secure=False; in production Secure=True (HTTPS)
+JWT_COOKIE_SECURE = IS_PROD
+
+# SameSite=Lax works for many local setups.
+# If your frontend runs on a different domain in production, you may need SameSite=None + Secure=True.
+JWT_COOKIE_SAMESITE = "Lax"
+
+# Cookie max-age (in seconds)
+JWT_ACCESS_COOKIE_MAX_AGE = 60 * 15          # 15 minutes
+JWT_REFRESH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days

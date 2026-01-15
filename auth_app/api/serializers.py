@@ -1,4 +1,3 @@
-# auth_app/api/serializers.py
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
@@ -52,3 +51,10 @@ class RegisterSerializer(serializers.Serializer):
             email=validated_data["email"],
             password=validated_data["password"],
         )
+
+class LoginSerializer(serializers.Serializer):
+    """
+    Validates login input.
+    """
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
