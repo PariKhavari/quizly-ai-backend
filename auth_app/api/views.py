@@ -1,22 +1,19 @@
+from django.contrib.auth import authenticate
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .serializers import RegisterSerializer, LoginSerializer
-from django.contrib.auth import authenticate
-from auth_app.services import build_jwt_tokens_for_user, set_auth_cookies
+from ..services import build_jwt_tokens_for_user, set_auth_cookies
+from rest_framework_simplejwt.exceptions import TokenError
+from ..services import clear_auth_cookies, blacklist_refresh_token
 
 
 class RegisterView(APIView):
     """
-    POST /api/register/
-
     Registers a new user.
-    Success response (201):
-      {"detail": "User created successfully!"}
     """
 
-    # This endpoint must be publicly accessible
     authentication_classes = []
     permission_classes = []
 
@@ -33,24 +30,9 @@ class RegisterView(APIView):
 
 class LoginView(APIView):
     """
-    POST /api/login/
-
-    Logs the user in and sets auth cookies:
+    Logs in the user and sets auth cookies:
     - access_token
     - refresh_token
-
-    Success response (200):
-    {
-      "detail": "Login successfully!",
-      "user": {
-        "id": 1,
-        "username": "...",
-        "email": "..."
-      }
-    }
-
-    Error response (401):
-      {"detail": "Invalid credentials."}
     """
 
     authentication_classes = []
@@ -65,7 +47,6 @@ class LoginView(APIView):
 
         user = authenticate(request=request, username=username, password=password)
         if user is None:
-            # Keep error messages generic for security reasons
             return Response({"detail": "Invalid credentials."}, status=status.HTTP_401_UNAUTHORIZED)
 
         tokens = build_jwt_tokens_for_user(user)
@@ -83,3 +64,33 @@ class LoginView(APIView):
         )
 
         return set_auth_cookies(response, tokens["access"], tokens["refresh"])
+
+
+class LogoutView(APIView):
+    """
+    Logs the user out by:
+    - blacklisting the refresh token (making it invalid)
+    - deleting access_token and refresh_token cookies
+
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        refresh_token = request.COOKIES.get("refresh_token")
+        if not refresh_token:
+            return Response({"detail": "Not authenticated."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            blacklist_refresh_token(refresh_token)
+        except TokenError:
+            pass
+
+        response = Response(
+            {
+                "detail": "Log-Out successfully! All Tokens will be deleted. Refresh token is now invalid."
+            },
+            status=status.HTTP_200_OK,
+        )
+        return clear_auth_cookies(response)

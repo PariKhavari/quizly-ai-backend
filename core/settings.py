@@ -45,8 +45,12 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "rest_framework",
     "corsheaders",
+    # SimpleJWT blacklist app (required to invalidate refresh tokens on logout)
+    "rest_framework_simplejwt.token_blacklist",
+    
     "auth_app",
     "quizly_app",
+    
 ]
 
 MIDDLEWARE = [
@@ -191,3 +195,4 @@ JWT_COOKIE_SAMESITE = "Lax"
 # Cookie max-age (in seconds)
 JWT_ACCESS_COOKIE_MAX_AGE = 60 * 15          # 15 minutes
 JWT_REFRESH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
+
