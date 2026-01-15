@@ -67,3 +67,9 @@ def blacklist_refresh_token(refresh_token: str) -> None:
     """
     token = RefreshToken(refresh_token)
     token.blacklist()
+
+
+def refresh_access_token(refresh_token: str) -> str:
+    """Create a new access token from a refresh token."""
+    token = RefreshToken(refresh_token)
+    return str(token.access_token)

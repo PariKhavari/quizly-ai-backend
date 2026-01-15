@@ -4,9 +4,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .serializers import RegisterSerializer, LoginSerializer
-from ..services import build_jwt_tokens_for_user, set_auth_cookies
+from ..services import build_jwt_tokens_for_user, set_auth_cookies,clear_auth_cookies, blacklist_refresh_token,refresh_access_token
 from rest_framework_simplejwt.exceptions import TokenError
-from ..services import clear_auth_cookies, blacklist_refresh_token
+from django.conf import settings
+
 
 
 class RegisterView(APIView):
@@ -94,3 +95,33 @@ class LogoutView(APIView):
             status=status.HTTP_200_OK,
         )
         return clear_auth_cookies(response)
+
+
+class TokenRefreshView(APIView):
+    """POST /api/token/refresh/ - Refresh access token using refresh_token cookie."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        refresh_token = request.COOKIES.get("refresh_token")
+        if not refresh_token:
+            return Response({"detail": "Refresh token missing."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            new_access = refresh_access_token(refresh_token)
+        except TokenError:
+            return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        response = Response({"detail": "Token refreshed", "access": new_access}, status=status.HTTP_200_OK)
+        
+        response.set_cookie(
+            key=settings.JWT_ACCESS_COOKIE_NAME,
+            value=new_access,
+            max_age=settings.JWT_ACCESS_COOKIE_MAX_AGE,
+            httponly=settings.JWT_COOKIE_HTTPONLY,
+            secure=settings.JWT_COOKIE_SECURE,
+            samesite=settings.JWT_COOKIE_SAMESITE,
+            path="/",
+        )
+        return response
