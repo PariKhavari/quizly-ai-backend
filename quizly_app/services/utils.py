@@ -1,6 +1,8 @@
 from __future__ import annotations
 import json
+import os
 import re
+import shutil
 from typing import Any, Dict, List
 from urllib.parse import parse_qs, urlparse
 
@@ -45,7 +47,7 @@ def extract_youtube_video_id(url: str) -> str:
 
 
 def canonical_youtube_url(video_id: str) -> str:
-    """Return canonical URL format required by the mentor: https://www.youtube.com/watch?v=VIDEO_ID"""
+    """Return canonical URL format: https://www.youtube.com/watch?v=VIDEO_ID"""
     if not video_id or not _YOUTUBE_ID_RE.match(video_id):
         raise QuizlyValidationError("Invalid video ID.")
     return f"https://www.youtube.com/watch?v={video_id}"
@@ -137,13 +139,36 @@ def validate_quiz_schema(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_yt_dlp_options(tmp_filename: str) -> Dict[str, Any]:
-    """Return yt-dlp options as required by the mentor."""
+    """
+    Create a yt-dlp options dictionary for downloading best-quality audio from YouTube.
+
+    The returned options:
+    - download audio-only with best available quality
+    - write the output using the given template path
+    - suppress most yt-dlp console output
+    - avoid downloading playlists
+    """
     if not tmp_filename:
         raise QuizlyValidationError("tmp_filename is required for yt-dlp options.")
 
-    return {
+    opts: Dict[str, Any] = {
         "format": "bestaudio/best",
         "outtmpl": tmp_filename,
         "quiet": True,
         "noplaylist": True,
     }
+
+    runtime = (os.environ.get("YTDLP_JS_RUNTIME") or "").strip().lower()
+    runtime_path = (os.environ.get("YTDLP_JS_RUNTIME_PATH") or "").strip()
+
+    if not runtime:
+        runtime = "deno" if shutil.which("deno") else ""
+
+    if runtime:
+        js_cfg: Dict[str, Any] = {}
+        if runtime_path:
+            js_cfg["path"] = runtime_path
+
+        opts["js_runtimes"] = {runtime: js_cfg}
+
+    return opts
