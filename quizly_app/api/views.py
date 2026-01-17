@@ -2,7 +2,11 @@ from __future__ import annotations
 from rest_framework import generics, permissions
 from rest_framework.exceptions import PermissionDenied
 from quizly_app.models import Quiz
-from .serializers import QuizSerializer, QuizUpdateSerializer
+from .serializers import QuizSerializer, QuizUpdateSerializer, CreateQuizSerializer
+from rest_framework import status
+from rest_framework.response import Response
+from quizly_app.services.quiz_creation import create_quiz_for_user
+from quizly_app.services.utils import QuizlyValidationError
 
 
 class UserQuizQuerysetMixin:
@@ -40,3 +44,23 @@ class QuizDetailView(UserQuizQuerysetMixin, generics.RetrieveUpdateDestroyAPIVie
         if instance.user_id != self.request.user.id:
             raise PermissionDenied("You do not have permission to delete this quiz.")
         instance.delete()
+
+
+class CreateQuizView(generics.GenericAPIView):
+    """POST /api/createQuiz/"""
+
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = CreateQuizSerializer
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            quiz = create_quiz_for_user(user=request.user, url=serializer.validated_data["url"])
+        except QuizlyValidationError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response({"detail": "Internal server error."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(QuizSerializer(quiz).data, status=status.HTTP_201_CREATED)

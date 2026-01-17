@@ -44,3 +44,9 @@ class QuizUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Quiz
         fields = ("title", "description")
+
+
+class CreateQuizSerializer(serializers.Serializer):
+    """Request serializer for creating a quiz from a YouTube URL."""
+
+    url = serializers.URLField()

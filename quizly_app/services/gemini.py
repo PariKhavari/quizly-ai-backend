@@ -4,10 +4,8 @@ import os
 import time
 from functools import lru_cache
 from typing import Any, Dict, Optional
-
 from google import genai
 from google.genai.errors import ClientError
-
 from .utils import QuizlyValidationError, parse_ai_quiz_json, validate_quiz_schema
 
 
