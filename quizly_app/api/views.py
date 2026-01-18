@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from quizly_app.services.quiz_creation import create_quiz_for_user
 from quizly_app.services.utils import QuizlyValidationError
+from .permissions import IsQuizOwner
 
 
 class UserQuizQuerysetMixin:
@@ -16,21 +17,25 @@ class UserQuizQuerysetMixin:
         return Quiz.objects.filter(user=self.request.user).prefetch_related("questions")
 
 
-class QuizListView(UserQuizQuerysetMixin, generics.ListAPIView):
+class QuizListView(generics.ListAPIView):
     """GET /api/quizzes/"""
 
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = QuizSerializer
 
+    def get_queryset(self):
+        return Quiz.objects.filter(user=self.request.user).prefetch_related("questions")
 
-class QuizDetailView(UserQuizQuerysetMixin, generics.RetrieveUpdateDestroyAPIView):
+
+class QuizDetailView(generics.RetrieveUpdateDestroyAPIView):
     """GET/PATCH/DELETE /api/quizzes/{id}/"""
 
-    permission_classes = [permissions.IsAuthenticated]
-    lookup_field = "pk"
+    queryset = Quiz.objects.all().prefetch_related("questions")
+    permission_classes = [permissions.IsAuthenticated, IsQuizOwner]
+  
 
     def get_serializer_class(self):
-        if self.request.method == "PATCH":
+        if self.request.method in ("PATCH", "PUT"):
             return QuizUpdateSerializer
         return QuizSerializer
 
