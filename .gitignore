@@ -292,3 +292,4 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/windows,python,djangocookies.txt
 __pycache__/
 cookies.txt
+cookies.txt
