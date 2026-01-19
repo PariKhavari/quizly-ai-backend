@@ -1,6 +1,7 @@
 from __future__ import annotations
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class Quiz(models.Model):
@@ -46,7 +47,14 @@ class Question(models.Model):
 
 
 class QuizAttempt(models.Model):
-    """A user's playthrough of a quiz (progress + completion)."""
+    """
+    A single "playthrough" of a quiz by a user.
+
+    Why this exists:
+    - One user can replay the same quiz multiple times.
+    - We can persist progress (current question) and store answers.
+    - We can compute a score at the end.
+    """
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -58,24 +66,45 @@ class QuizAttempt(models.Model):
         on_delete=models.CASCADE,
         related_name="attempts",
     )
-    current_index = models.PositiveIntegerField(default=0)
-    is_finished = models.BooleanField(default=False)
+
+    current_question_index = models.PositiveIntegerField(default=0)
+    is_completed = models.BooleanField(default=False)
+    correct_count = models.PositiveIntegerField(default=0)
+    total_questions = models.PositiveIntegerField(default=10)
     started_at = models.DateTimeField(auto_now_add=True)
-    finished_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-started_at"]
         indexes = [
-            models.Index(fields=["user", "quiz", "is_finished"]),
+            models.Index(fields=["user", "quiz", "is_completed"]),
         ]
 
     def __str__(self) -> str:
-        return f"Attempt #{self.pk} (User #{self.user_id}, Quiz #{self.quiz_id})"
+        return f"Attempt #{self.pk} (Quiz #{self.quiz_id}, User #{self.user_id})"
+
+    def mark_completed(self) -> None:
+        """Mark the attempt as completed and set completion timestamp."""
+        self.is_completed = True
+        self.completed_at = timezone.now()
+
+    @property
+    def score_percent(self) -> float:
+        """Return the score as a percentage (0..100)."""
+        if not self.total_questions:
+            return 0.0
+        return round((self.correct_count / self.total_questions) * 100.0, 1)
 
 
-class UserAnswer(models.Model):
-    """A stored answer for a question within an attempt (can be updated)."""
+class AttemptAnswer(models.Model):
+    """
+    The user's selected answer for a specific question in a specific attempt.
+
+    Design:
+    - Unique per (attempt, question), so changing an answer updates the same row.
+    - Stores 'is_correct' for quick score computation.
+    """
 
     attempt = models.ForeignKey(
         QuizAttempt,
@@ -85,16 +114,25 @@ class UserAnswer(models.Model):
     question = models.ForeignKey(
         Question,
         on_delete=models.CASCADE,
-        related_name="user_answers",
+        related_name="attempt_answers",
     )
+
     selected_option = models.CharField(max_length=255)
-    answered_at = models.DateTimeField(auto_now=True)
+    is_correct = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ("attempt", "question")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["attempt", "question"],
+                name="uniq_attempt_question",
+            )
+        ]
         indexes = [
             models.Index(fields=["attempt", "question"]),
         ]
 
     def __str__(self) -> str:
-        return f"Answer (Attempt #{self.attempt_id}, Question #{self.question_id})"
+        return f"AttemptAnswer (Attempt #{self.attempt_id}, Question #{self.question_id})"
