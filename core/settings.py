@@ -25,7 +25,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
-    raise RuntimeError("DJANGO_SECRET_KEY is missing. Please set it in your .env file.")
+    raise RuntimeError(
+        "DJANGO_SECRET_KEY is missing. Please set it in your .env file.")
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -47,10 +48,10 @@ INSTALLED_APPS = [
     "corsheaders",
     # SimpleJWT blacklist app (required to invalidate refresh tokens on logout)
     "rest_framework_simplejwt.token_blacklist",
-    
+
     "auth_app",
     "quizly_app",
-    
+
 ]
 
 MIDDLEWARE = [
@@ -139,12 +140,17 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # DRF (base configuration)
 # -------------------------
 REST_FRAMEWORK = {
-     # Keep default permissions open for now; we will secure endpoints explicitly per view.
+    # Keep default permissions open for now; we will secure endpoints explicitly per view.
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
-   "DEFAULT_AUTHENTICATION_CLASSES": [
+    "DEFAULT_AUTHENTICATION_CLASSES": [
         "auth_app.authentication.CookieJWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
     ],
 }
 
@@ -177,7 +183,7 @@ CSRF_COOKIE_SECURE = IS_PROD
 # If your frontend is on a different domain in production, you may need SameSite=None + Secure.
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
-          
+
 # Cookie names must match the endpoint documentation
 JWT_ACCESS_COOKIE_NAME = "access_token"
 JWT_REFRESH_COOKIE_NAME = "refresh_token"
@@ -195,4 +201,3 @@ JWT_COOKIE_SAMESITE = "Lax"
 # Cookie max-age (in seconds)
 JWT_ACCESS_COOKIE_MAX_AGE = 60 * 15          # 15 minutes
 JWT_REFRESH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
-

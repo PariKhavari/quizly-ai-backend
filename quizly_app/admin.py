@@ -1,54 +1,71 @@
 from __future__ import annotations
 from django.contrib import admin
-from quizly_app.models import AttemptAnswer, Question, Quiz, QuizAttempt
+from quizly_app.models import Quiz, Question, QuizAttempt, AttemptAnswer
+
+
+class QuestionInline(admin.TabularInline):
+    """Fragen direkt im Quiz-Admin bearbeiten/ansehen (Inline)."""
+
+    model = Question
+    extra = 0
+    fields = ("question_title", "answer", "question_options", "created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at")
+    show_change_link = True
 
 
 @admin.register(Quiz)
 class QuizAdmin(admin.ModelAdmin):
+    """Admin-Ansicht für Quizzes inkl. Inline-Fragen."""
+
     list_display = ("id", "title", "user", "created_at", "updated_at")
+    list_select_related = ("user",)
     list_filter = ("created_at", "updated_at")
     search_fields = ("title", "description", "video_url", "user__username", "user__email")
-    readonly_fields = ("created_at", "updated_at")
     ordering = ("-created_at",)
-    
+    readonly_fields = ("created_at", "updated_at")
+    inlines = (QuestionInline,)
+
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
-    list_display = ("id", "quiz", "short_title", "created_at")
+    """Admin-Ansicht für einzelne Fragen."""
+
+    list_display = ("id", "quiz", "question_title", "created_at")
+    list_select_related = ("quiz",)
     list_filter = ("created_at",)
     search_fields = ("question_title", "answer", "quiz__title")
-    readonly_fields = ("created_at", "updated_at")
     ordering = ("id",)
 
-    def short_title(self, obj: Question) -> str:
-        return (obj.question_title[:60] + "...") if len(obj.question_title) > 60 else obj.question_title
 
-    short_title.short_description = "Question"
+class AttemptAnswerInline(admin.TabularInline):
+    """Antworten direkt im Attempt-Admin als Inline anzeigen."""
+
+    model = AttemptAnswer
+    extra = 0
+    fields = ("question", "selected_option", "is_correct", "created_at", "updated_at")
+    readonly_fields = ("is_correct", "created_at", "updated_at")
+    show_change_link = True
 
 
 @admin.register(QuizAttempt)
 class QuizAttemptAdmin(admin.ModelAdmin):
-    list_display = (
-        "id",
-        "quiz",
-        "user",
-        "is_completed",
-        "current_question_index",
-        "correct_count",
-        "total_questions",
-        "started_at",
-        "completed_at",
-    )
-    list_filter = ("is_completed", "started_at", "completed_at")
-    search_fields = ("quiz__title", "user__username", "user__email")
+    """Admin-Ansicht für Quiz-Versuche inkl. Inline-Antworten."""
+
+    list_display = ("id", "user", "quiz", "is_completed", "correct_count", "total_questions", "updated_at")
+    list_select_related = ("user", "quiz")
+    list_filter = ("is_completed", "updated_at")
+    search_fields = ("user__username", "quiz__title")
+    ordering = ("-updated_at",)
     readonly_fields = ("started_at", "completed_at", "updated_at")
-    ordering = ("-started_at",)
+    inlines = (AttemptAnswerInline,)
 
 
 @admin.register(AttemptAnswer)
 class AttemptAnswerAdmin(admin.ModelAdmin):
-    list_display = ("id", "attempt", "question", "selected_option", "is_correct", "updated_at")
-    list_filter = ("is_correct", "updated_at")
-    search_fields = ("selected_option", "question__question_title", "attempt__quiz__title")
-    readonly_fields = ("created_at", "updated_at")
-    ordering = ("-updated_at",)
+    """Admin-Ansicht für einzelne gespeicherte Antworten eines Attempts."""
+
+    list_display = ("id", "attempt", "question", "selected_option", "is_correct", "created_at")
+    list_select_related = ("attempt", "question")
+    list_filter = ("is_correct", "created_at")
+    search_fields = ("selected_option", "question__question_title")
+    ordering = ("-created_at",)
