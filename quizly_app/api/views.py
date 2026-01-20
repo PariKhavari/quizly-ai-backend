@@ -1,4 +1,6 @@
 from __future__ import annotations
+import json
+from venv import logger
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -49,13 +51,32 @@ class CreateQuizView(APIView):
 
     def post(self, request):
         """Create a quiz for the authenticated user from request.data['url']."""
-        url = request.data.get("url")
-        if not url:
+        url = (
+            request.data.get("url")
+            or request.data.get("youtubeUrl")
+            or request.data.get("youtube_url")
+        )
+        if not url and request.body:
+            try:
+                raw = json.loads(request.body.decode("utf-8"))
+                if isinstance(raw, dict):
+                    url = raw.get("url") or raw.get("youtubeUrl") or raw.get("youtube_url")
+                elif isinstance(raw, str):
+                    url = raw
+            except json.JSONDecodeError:
+                pass
+
+        if not url or not str(url).strip():
+            logger.warning(
+                "createQuiz 400: missing url. content_type=%s body=%r",
+                request.content_type,
+                request.body[:300],
+            )
             return Response(
                 {"detail": "Missing 'url'."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
+        url = str(url).strip()
         try:
             quiz = create_quiz_for_user(user=request.user, url=url)
         except QuizlyValidationError as exc:

@@ -166,13 +166,18 @@ CORS_ALLOW_CREDENTIALS = True
 
 # CSRF trusted origins for typical local frontend dev servers (React/Vite)
 CSRF_TRUSTED_ORIGINS = [
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
 
-
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+]
 # Cookie security toggles (prod vs dev)
 IS_PROD = not DEBUG
 
