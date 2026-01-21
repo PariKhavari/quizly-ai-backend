@@ -19,7 +19,8 @@ from quizly_app.api.serializers import (
 )
 from quizly_app.models import AttemptAnswer, Question, Quiz, QuizAttempt
 from quizly_app.services.quiz_creation import create_quiz_for_user
-
+import logging
+logger = logging.getLogger(__name__)
 
 def _get_quiz_or_403(quiz_id: int, user) -> Quiz:
     """
@@ -69,6 +70,7 @@ class CreateQuizView(APIView):
         try:
             quiz = create_quiz_for_user(user=request.user, url=url)
         except QuizlyValidationError as exc:
+            logger.exception("createQuiz failed: %s", exc)
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(QuizCreateResponseSerializer(quiz).data, status=status.HTTP_201_CREATED)

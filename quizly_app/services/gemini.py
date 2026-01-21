@@ -76,7 +76,7 @@ def _call_gemini(prompt: str, model: str) -> str:
 
 def generate_quiz_from_transcript(
     transcript: str,
-    model: str = "gemini-2.0-flash",
+    model: str = "gemini-2.5-flash",
     max_attempts: int = 3,
 ) -> Dict[str, Any]:
     """
