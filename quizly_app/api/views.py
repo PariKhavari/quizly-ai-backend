@@ -1,6 +1,4 @@
 from __future__ import annotations
-import json
-from venv import logger
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -8,6 +6,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from auth_app.authentication import CookieJWTAuthentication
 from quizly_app.services.utils import QuizlyValidationError
 from quizly_app.api.serializers import (
     QuizAttemptSerializer,
@@ -23,7 +22,10 @@ from quizly_app.services.quiz_creation import create_quiz_for_user
 
 
 def _get_quiz_or_403(quiz_id: int, user) -> Quiz:
-    """Return the quiz if owned by user; otherwise raise 403 (or 404 if missing)."""
+    """
+    Loads a quiz by id and ensures it belongs to the requesting user.
+    Raises 404 if quiz doesn't exist, 403 if it belongs to another user.
+    """
     quiz = get_object_or_404(Quiz, pk=quiz_id)
     if quiz.user_id != user.id:
         raise PermissionDenied("You do not have permission to access this quiz.")
@@ -31,7 +33,10 @@ def _get_quiz_or_403(quiz_id: int, user) -> Quiz:
 
 
 def _get_attempt_or_403(attempt_id: int, user) -> QuizAttempt:
-    """Return the attempt if owned by user; otherwise raise 403 (or 404 if missing)."""
+    """
+    Loads an attempt by id and ensures it belongs to the requesting user.
+    Raises 404 if attempt doesn't exist, 403 if it belongs to another user.
+    """
     attempt = get_object_or_404(QuizAttempt, pk=attempt_id)
     if attempt.user_id != user.id:
         raise PermissionDenied("You do not have permission to access this attempt.")
@@ -39,61 +44,45 @@ def _get_attempt_or_403(attempt_id: int, user) -> QuizAttempt:
 
 
 def _recalculate_attempt_score(attempt: QuizAttempt) -> None:
-    """Update attempt.correct_count and attempt.total_questions based on stored answers."""
+    """
+    Recomputes correct/total counters based on stored AttemptAnswer rows.
+    Keeps total_questions stable if quiz has no questions for any reason.
+    """
     correct = AttemptAnswer.objects.filter(attempt=attempt, is_correct=True).count()
     attempt.correct_count = correct
     attempt.total_questions = attempt.quiz.questions.count() or attempt.total_questions
 
 
 class CreateQuizView(APIView):
-    """Create a quiz from a YouTube URL and persist it with generated questions."""
+    """
+    Creates a quiz from a YouTube URL: download audio -> transcribe -> generate questions -> persist.
+    Important: Force CookieJWTAuthentication to avoid SessionAuth+CSRF 403 in the frontend.
+    """
     permission_classes = [IsAuthenticated]
+    authentication_classes = [CookieJWTAuthentication]
 
     def post(self, request):
-        """Create a quiz for the authenticated user from request.data['url']."""
-        url = (
-            request.data.get("url")
-            or request.data.get("youtubeUrl")
-            or request.data.get("youtube_url")
-        )
-        if not url and request.body:
-            try:
-                raw = json.loads(request.body.decode("utf-8"))
-                if isinstance(raw, dict):
-                    url = raw.get("url") or raw.get("youtubeUrl") or raw.get("youtube_url")
-                elif isinstance(raw, str):
-                    url = raw
-            except json.JSONDecodeError:
-                pass
+        url = request.data.get("url")
+        if not url:
+            return Response({"detail": "Missing 'url'."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not url or not str(url).strip():
-            logger.warning(
-                "createQuiz 400: missing url. content_type=%s body=%r",
-                request.content_type,
-                request.body[:300],
-            )
-            return Response(
-                {"detail": "Missing 'url'."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        url = str(url).strip()
         try:
             quiz = create_quiz_for_user(user=request.user, url=url)
         except QuizlyValidationError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(
-            QuizCreateResponseSerializer(quiz).data,
-            status=status.HTTP_201_CREATED,
-        )
+        return Response(QuizCreateResponseSerializer(quiz).data, status=status.HTTP_201_CREATED)
 
 
 class QuizListView(APIView):
-    """List all quizzes belonging to the authenticated user."""
+    """
+    Returns all quizzes belonging to the authenticated user (including questions).
+    GET is safe, but we still require authentication.
+    """
     permission_classes = [IsAuthenticated]
+    authentication_classes = [CookieJWTAuthentication]
 
     def get(self, request):
-        """Return all quizzes owned by the authenticated user."""
         quizzes = Quiz.objects.filter(user=request.user).prefetch_related("questions")
         return Response(
             QuizListSerializer(quizzes, many=True).data,
@@ -102,50 +91,47 @@ class QuizListView(APIView):
 
 
 class QuizDetailView(APIView):
-    """Retrieve, update, or delete a single quiz owned by the authenticated user."""
+    """
+    Retrieve/update/delete a single quiz of the authenticated user.
+    Patch/Delete are write operations; enforce CookieJWTAuthentication to avoid CSRF 403.
+    """
     permission_classes = [IsAuthenticated]
+    authentication_classes = [CookieJWTAuthentication]
 
     def _get_quiz_or_403(self, request, quiz_id: int) -> Quiz:
-        """Return the quiz if owned by request.user; otherwise raise 403."""
         quiz = get_object_or_404(Quiz, pk=quiz_id)
         if quiz.user_id != request.user.id:
             raise PermissionDenied("You do not have permission to access this quiz.")
         return quiz
 
     def get(self, request, quiz_id: int):
-        """Return full quiz detail (including questions) for the given quiz_id."""
         quiz = self._get_quiz_or_403(request, quiz_id)
-        return Response(
-            QuizDetailSerializer(quiz).data,
-            status=status.HTTP_200_OK,
-        )
+        return Response(QuizDetailSerializer(quiz).data, status=status.HTTP_200_OK)
 
     def patch(self, request, quiz_id: int):
-        """Partially update quiz fields (title/description) for the given quiz_id."""
         quiz = self._get_quiz_or_403(request, quiz_id)
 
         serializer = QuizPatchSerializer(quiz, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        return Response(
-            QuizDetailSerializer(quiz).data,
-            status=status.HTTP_200_OK,
-        )
+        return Response(QuizDetailSerializer(quiz).data, status=status.HTTP_200_OK)
 
     def delete(self, request, quiz_id: int):
-        """Delete the quiz (and all related questions) for the given quiz_id."""
         quiz = self._get_quiz_or_403(request, quiz_id)
         quiz.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class StartAttemptView(APIView):
-    """Start a new attempt or resume an existing unfinished attempt for a quiz."""
+    """
+    Starts a new attempt or returns an existing unfinished attempt unless 'new=true' is sent.
+    Write operation => enforce CookieJWTAuthentication to avoid SessionAuth CSRF issues.
+    """
     permission_classes = [IsAuthenticated]
+    authentication_classes = [CookieJWTAuthentication]
 
     def post(self, request, quiz_id: int):
-        """Start/resume an attempt for quiz_id; pass {'new': true} to force a new attempt."""
         quiz = _get_quiz_or_403(quiz_id=quiz_id, user=request.user)
 
         data_in = StartAttemptInputSerializer(data=request.data)
@@ -154,15 +140,10 @@ class StartAttemptView(APIView):
 
         if not force_new:
             existing = QuizAttempt.objects.filter(
-                user=request.user,
-                quiz=quiz,
-                is_completed=False,
+                user=request.user, quiz=quiz, is_completed=False
             ).first()
             if existing:
-                return Response(
-                    QuizAttemptSerializer(existing).data,
-                    status=status.HTTP_200_OK,
-                )
+                return Response(QuizAttemptSerializer(existing).data, status=status.HTTP_200_OK)
 
         attempt = QuizAttempt.objects.create(
             user=request.user,
@@ -171,18 +152,16 @@ class StartAttemptView(APIView):
             is_completed=False,
             total_questions=quiz.questions.count() or 10,
         )
-        return Response(
-            QuizAttemptSerializer(attempt).data,
-            status=status.HTTP_201_CREATED,
-        )
+        return Response(QuizAttemptSerializer(attempt).data, status=status.HTTP_201_CREATED)
 
 
 class AttemptDetailView(APIView):
-    """Retrieve the current state of an attempt including saved answers."""
+    """
+    Returns attempt state + answers. Read-only endpoint.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, attempt_id: int):
-        """Return attempt details for attempt_id if owned by the authenticated user."""
         attempt = _get_attempt_or_403(attempt_id=attempt_id, user=request.user)
         attempt = (
             QuizAttempt.objects.filter(pk=attempt.pk)
@@ -190,24 +169,23 @@ class AttemptDetailView(APIView):
             .prefetch_related("answers", "quiz__questions")
             .get()
         )
-        return Response(
-            QuizAttemptSerializer(attempt).data,
-            status=status.HTTP_200_OK,
-        )
+        return Response(QuizAttemptSerializer(attempt).data, status=status.HTTP_200_OK)
 
 
 class SaveAnswerView(APIView):
-    """Save/update an answer for an attempt and optionally mark the attempt as finished."""
+    """
+    Saves/updates a selected option for a given question inside an attempt.
+    Can also mark attempt as finished. Write operation => enforce CookieJWTAuthentication.
+    """
     permission_classes = [IsAuthenticated]
+    authentication_classes = [CookieJWTAuthentication]
 
     @transaction.atomic
     def patch(self, request, attempt_id: int):
-        """Upsert an answer for attempt_id and update progress/score; supports finish=true."""
         attempt = _get_attempt_or_403(attempt_id=attempt_id, user=request.user)
 
         payload = SaveAnswerInputSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
-
         question_id = payload.validated_data["question_id"]
         selected_option = payload.validated_data["selected_option"]
         finish = payload.validated_data.get("finish", False)
@@ -245,19 +223,18 @@ class SaveAnswerView(APIView):
             .prefetch_related("answers")
             .get()
         )
-        return Response(
-            QuizAttemptSerializer(attempt).data,
-            status=status.HTTP_200_OK,
-        )
+        return Response(QuizAttemptSerializer(attempt).data, status=status.HTTP_200_OK)
 
 
 class FinishAttemptView(APIView):
-    """Finalize an attempt by marking it completed and returning its final state."""
+    """
+    Marks an attempt as completed and recalculates score. Write operation => enforce CookieJWTAuthentication.
+    """
     permission_classes = [IsAuthenticated]
+    authentication_classes = [CookieJWTAuthentication]
 
     @transaction.atomic
     def post(self, request, attempt_id: int):
-        """Mark attempt_id as completed and return updated attempt data."""
         attempt = _get_attempt_or_403(attempt_id=attempt_id, user=request.user)
 
         _recalculate_attempt_score(attempt)
@@ -271,18 +248,17 @@ class FinishAttemptView(APIView):
             .prefetch_related("answers")
             .get()
         )
-        return Response(
-            QuizAttemptSerializer(attempt).data,
-            status=status.HTTP_200_OK,
-        )
+        return Response(QuizAttemptSerializer(attempt).data, status=status.HTTP_200_OK)
 
 
 class AttemptResultView(APIView):
-    """Return result summary and optionally per-question breakdown for an attempt."""
+    """
+    Returns result summary, optionally with per-question details.
+    Read-only endpoint.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, attempt_id: int):
-        """Return attempt result; add ?details=1 to include per-question answer comparison."""
         attempt = _get_attempt_or_403(attempt_id=attempt_id, user=request.user)
         attempt = (
             QuizAttempt.objects.filter(pk=attempt.pk)
@@ -308,7 +284,6 @@ class AttemptResultView(APIView):
         if include_details:
             answer_map = {a.question_id: a for a in attempt.answers.all()}
             details = []
-
             for q in attempt.quiz.questions.all().order_by("id"):
                 a = answer_map.get(q.id)
                 details.append(

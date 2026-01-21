@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from datetime import timedelta
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -146,7 +148,6 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "auth_app.authentication.CookieJWTAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
@@ -159,7 +160,7 @@ REST_FRAMEWORK = {
 # -------------------------
 # For local development this is the simplest setup.
 # In production, replace this with CORS_ALLOWED_ORIGINS.
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
 # Allow sending cookies from the frontend (fetch/axios must use credentials/withCredentials)
 CORS_ALLOW_CREDENTIALS = True
@@ -167,16 +168,12 @@ CORS_ALLOW_CREDENTIALS = True
 # CSRF trusted origins for typical local frontend dev servers (React/Vite)
 CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5500",
-    "http://localhost:5500",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+
 ]
 
 CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5500",
-    "http://localhost:5500",
+   
 ]
 # Cookie security toggles (prod vs dev)
 IS_PROD = not DEBUG
@@ -206,3 +203,16 @@ JWT_COOKIE_SAMESITE = "Lax"
 # Cookie max-age (in seconds)
 JWT_ACCESS_COOKIE_MAX_AGE = 60 * 15          # 15 minutes
 JWT_REFRESH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
+
+SIMPLE_JWT = {
+    # Standard ist 5 Minuten -> deshalb passiert dein Problem nach ~5 Minuten
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+
+    # Optional, aber sinnvoll:
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": True,
+
+    # Wenn du Cookies nutzt, ist Header-Auth optional – du kannst es trotzdem lassen
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}

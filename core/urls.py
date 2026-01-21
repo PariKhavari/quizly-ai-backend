@@ -21,5 +21,4 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path("api/", include("auth_app.api.urls")),
     path("api/", include("quizly_app.api.urls")),
-    path("api-auth/", include("rest_framework.urls")),
 ]
